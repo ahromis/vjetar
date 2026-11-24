@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which wind is it?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef1ef;
+    --ink: #0e3342;
+    --muted: #4d6a76;
+    --line: #c5d3d6;
+    --accent: #0f7f90;
+    --panel: #e2e9e8;
+    --font: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a1d27;
+      --ink: #e4eef0;
+      --muted: #8fb0b9;
+      --line: #234451;
+      --accent: #58c4d2;
+      --panel: #10303d;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 28px 22px 56px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .place { font-weight: 600; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
+  select, .units button {
+    font: inherit;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 12px;
+  }
+  select { font-weight: 600; }
+  .units { display: inline-flex; }
+  .units button { cursor: pointer; border-radius: 0; }
+  .units button:first-child { border-radius: 8px 0 0 8px; border-right-width: 0; }
+  .units button:last-child { border-radius: 0 8px 8px 0; }
+  .units button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .finder { margin-top: 22px; }
+  .finder form { display: flex; gap: 8px; max-width: 460px; }
+  .finder input {
+    flex: 1; min-width: 0;
+    font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px;
+  }
+  .finder input::placeholder { color: var(--muted); }
+  .finder button, .results button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    color: var(--bg); background: var(--ink);
+    border: 1px solid var(--ink); border-radius: 8px; padding: 9px 16px;
+  }
+  .results { list-style: none; margin: 10px 0 0; padding: 0; max-width: 460px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .results li + li { border-top: 1px solid var(--line); }
+  .results button {
+    display: block; width: 100%; text-align: left; border: 0; border-radius: 0;
+    background: transparent; color: var(--ink); font-weight: 400; padding: 10px 12px;
+  }
+  .results button:hover { background: var(--panel); }
+  .results button b { font-weight: 600; }
+  .results button span { color: var(--muted); font-size: 0.9rem; }
+  .msg { margin: 8px 0 0; min-height: 1.4em; color: var(--muted); font-size: 0.9rem; }
+
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 40px;
+    align-items: center;
+    margin-top: 36px;
+  }
+  @media (max-width: 800px) { .stage { grid-template-columns: 1fr; gap: 20px; } }
+
+  .prompt { margin: 0 0 4px; color: var(--muted); font-size: 1rem; }
+  h1 {
+    margin: 0;
+    font-weight: 800;
+    font-size: clamp(3.6rem, 13vw, 8.4rem);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+  .gloss { margin: 18px 0 0; font-size: 1.2rem; max-width: 30em; }
+  .detail { margin: 10px 0 0; color: var(--muted); max-width: 34em; }
+
+  .readout {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: start;
+    gap: 8px 36px;
+    margin: 28px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .readout div { min-width: 0; }
+  .readout dt { color: var(--muted); font-size: 0.85rem; }
+  .readout dd { margin: 0; font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .readout dd small { font-size: 0.9rem; font-weight: 400; color: var(--muted); }
+
+  .rose-wrap { width: 100%; max-width: 440px; justify-self: center; }
+  svg.rose { width: 100%; height: auto; display: block; overflow: visible; }
+  .rose .ring { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .rose .spoke { stroke: var(--line); stroke-width: 1; }
+  .rose .name { font-family: var(--font); font-size: 15px; font-weight: 600; fill: var(--muted); }
+  .rose .dir { font-family: var(--font); font-size: 11px; fill: var(--muted); opacity: 0.8; }
+  .rose .on .name { fill: var(--ink); font-weight: 800; font-size: 17px; }
+  .rose .on .dir { fill: var(--accent); opacity: 1; }
+  .rose .chip { fill: var(--accent); opacity: 0; }
+  .rose .on .chip { opacity: 0.16; }
+  .rose .arrow { stroke: var(--accent); fill: var(--accent); transition: transform 1.2s cubic-bezier(.2,.8,.2,1); transform-origin: 160px 160px; }
+  .rose .hub { fill: var(--bg); stroke: var(--accent); stroke-width: 2; }
+  .rose.calm .arrow { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .rose .arrow { transition: none; } }
+
+  .foot {
+    margin-top: 44px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .foot p { margin: 0; max-width: 46em; }
+  .status[data-error="true"] { color: #b3402f; }
+  @media (prefers-color-scheme: dark) { .status[data-error="true"] { color: #ff9d8a; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="place">
+      <span id="placeName">No town chosen</span>
+    </div>
+    <div class="units" role="group" aria-label="Speed units">
+      <button type="button" data-unit="kn" aria-pressed="true">knots</button>
+      <button type="button" data-unit="kmh" aria-pressed="false">km/h</button>
+    </div>
+  </header>
+
+  <div class="finder">
+    <form id="searchForm" role="search">
+      <input id="q" type="search" placeholder="Enter a coastal Croatian town or city" aria-label="Coastal Croatian town or city" autocomplete="off" spellcheck="false">
+      <button type="submit">Find wind</button>
+    </form>
+    <ul class="results" id="results" hidden></ul>
+    <p class="msg" id="searchMsg" role="status"></p>
+  </div>
+
+  <section class="stage" aria-live="polite">
+    <div>
+      <p class="prompt" id="prompt">Which wind is blowing?</p>
+      <h1 id="windName">?</h1>
+      <p class="gloss" id="windGloss">Type a coastal Croatian town or city above to see which wind is blowing there.</p>
+      <p class="detail" id="windDetail"></p>
+      <dl class="readout">
+        <div><dt>Speed</dt><dd id="rSpeed">–</dd></div>
+        <div><dt>Gusts</dt><dd id="rGust">–</dd></div>
+        <div><dt>Blowing from</dt><dd id="rDir">–</dd></div>
+      </dl>
+    </div>
+    <div class="rose-wrap">
+      <svg class="rose calm" id="rose" viewBox="0 0 320 320" role="img" aria-label="Wind rose with the current wind highlighted"></svg>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p id="placeNote"></p>
+    <p class="status" id="status"></p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // Wind names by the direction the wind blows FROM, in 45° steps starting at north.
+  var WINDS = [
+    { name: "Tramontana", dir: "S",  gloss: "Cold, dry wind from the north.", detail: "Usually brings clear skies and good visibility." },
+    { name: "Bura",       dir: "SI", gloss: "Cold, dry, gusty wind from the northeast.", detail: "Blows hardest in winter and comes in sudden gusts. It is the Adriatic’s best-known wind." },
+    { name: "Levant",     dir: "I",  gloss: "Wind from the east.", detail: "Often moist and tied to unsettled weather, with a rising sea." },
+    { name: "Jugo",       dir: "JI", gloss: "Warm, humid wind from the southeast.", detail: "Usually brings cloud, rain and a rough sea, and can last for days." },
+    { name: "Oštro",      dir: "J",  gloss: "Wind from the south.", detail: "Warm and often damp, closely related to the jugo." },
+    { name: "Lebić",      dir: "JZ", gloss: "Wind from the southwest.", detail: "Often gusty and linked to changing weather." },
+    { name: "Pulenat",    dir: "Z",  gloss: "Wind from the west.", detail: "Usually mild, and often comes with a change in the weather." },
+    { name: "Maestral",   dir: "SZ", gloss: "Fair-weather wind from the northwest.", detail: "A sea breeze that builds in the late morning and fades in the evening. It is the typical wind of fair summer days." }
+  ];
+
+  var BEAUFORT_KN = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
+  var BEAUFORT_TXT = ["calm", "light air", "light breeze", "gentle breeze", "moderate breeze", "fresh breeze", "strong breeze", "near gale", "gale", "strong gale", "storm", "violent storm", "hurricane force"];
+
+  var state = { place: null, unit: "kn", data: null, timer: null };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function load(key, fallback) {
+    try { var v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
+  }
+  function save(key, val) {
+    try { localStorage.setItem(key, val); } catch (e) {}
+  }
+
+  function beaufort(kn) {
+    var n = 0;
+    while (n < BEAUFORT_KN.length && kn >= BEAUFORT_KN[n]) n++;
+    return n;
+  }
+
+  function conv(kn) { return state.unit === "kn" ? kn : kn * 1.852; }
+  function fmt(kn) {
+    var v = conv(kn);
+    return Math.round(v) + ' <small>' + (state.unit === "kn" ? "kn" : "km/h") + '</small>';
+  }
+
+  // Which wind is it? Returns the table entry plus the displayed name.
+  // Maestral and burin are thermal winds, so they depend on season and time of day.
+  // month: 1-12, hour: 0-23, both local time.
+  function classify(deg, kn, month, hour) {
+    if (kn < 3) {
+      return { name: "Bonaca", dir: "", gloss: "Calm. Almost no wind.", detail: "Bonaca is the Croatian word for a calm sea.", calm: true };
+    }
+    var idx = Math.round(deg / 45) % 8;
+    var w = WINDS[idx];
+    var warm = month >= 4 && month <= 10;      // roughly April to October
+    var day = hour >= 10 && hour < 20;         // late morning to evening
+    var out = { name: w.name, dir: w.dir, gloss: w.gloss, detail: w.detail, calm: false, sector: idx };
+
+    if (w.name === "Maestral" && !(warm && day)) {
+      out.name = "Sjeverozapadni vjetar";
+      out.sector = -1;
+      out.gloss = "Wind from the northwest, but not a true maestral.";
+      out.detail = "The maestral is a daytime sea breeze of the warm season. Outside that, this is simply a northwest wind.";
+    } else if (w.name === "Bura" && kn < 13) {
+      if (warm && !day) {
+        out.name = "Burin";
+        out.gloss = "A gentle night breeze from the northeast.";
+        out.detail = "The burin is a light land breeze that blows off the coast at night in the warm season. It usually means clear skies.";
+      } else {
+        out.gloss = "Light wind from the northeast, a weak bura.";
+        out.detail = "Same direction as the bura, but light for now. It can strengthen quickly and in gusts.";
+      }
+    }
+    return out;
+  }
+
+  function buildRose() {
+    var svg = $("rose"), cx = 160, cy = 160, r = 104, html = "";
+    html += '<circle class="ring" cx="' + cx + '" cy="' + cy + '" r="' + r + '"/>';
+    html += '<circle class="ring" cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.5) + '"/>';
+    WINDS.forEach(function (w, i) {
+      var a = (i * 45 - 90) * Math.PI / 180;
+      var x1 = cx + Math.cos(a) * 18, y1 = cy + Math.sin(a) * 18;
+      var x2 = cx + Math.cos(a) * r, y2 = cy + Math.sin(a) * r;
+      var lx = cx + Math.cos(a) * 134, ly = cy + Math.sin(a) * 134;
+      html += '<line class="spoke" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
+      html += '<g data-i="' + i + '" id="w' + i + '">' +
+        '<ellipse class="chip" cx="' + lx.toFixed(1) + '" cy="' + ly.toFixed(1) + '" rx="40" ry="20"/>' +
+        '<text class="name" x="' + lx.toFixed(1) + '" y="' + (ly - 1).toFixed(1) + '" text-anchor="middle">' + w.name + '</text>' +
+        '<text class="dir" x="' + lx.toFixed(1) + '" y="' + (ly + 12).toFixed(1) + '" text-anchor="middle">' + w.dir + '</text>' +
+        '</g>';
+    });
+    // Arrow starts at the edge the wind comes from and points toward the centre (downwind).
+    html += '<g class="arrow" id="arrow"><line x1="160" y1="56" x2="160" y2="138" stroke-width="5" stroke-linecap="round"/>' +
+            '<path d="M149 128 L160 150 L171 128 Z" stroke="none"/></g>';
+    html += '<circle class="hub" cx="160" cy="160" r="9"/>';
+    svg.innerHTML = html;
+  }
+
+  function render() {
+    var d = state.data;
+    if (!d) return;
+    var cls = classify(d.deg, d.kn, d.month, d.hour);
+
+    var h1 = $("windName");
+    h1.textContent = cls.name;
+    var len = cls.name.length;
+    h1.style.fontSize = len >= 14 ? "clamp(2rem, 6vw, 3.6rem)" : len >= 10 ? "clamp(2.2rem, 7.2vw, 4.2rem)" : len >= 7 ? "clamp(3rem, 10.5vw, 6.2rem)" : "";
+    $("windGloss").textContent = cls.gloss;
+    $("windDetail").textContent = cls.detail;
+    $("rSpeed").innerHTML = fmt(d.kn) + (d.kn >= 1 ? '' : '');
+    $("rGust").innerHTML = fmt(d.gust);
+    $("rDir").innerHTML = cls.calm ? "–" : Math.round(d.deg) + '° <small>' + cls.dir + '</small>';
+
+    var b = beaufort(d.kn);
+    $("rSpeed").innerHTML += ' <small>· Bft ' + b + ', ' + BEAUFORT_TXT[b] + '</small>';
+
+    var rose = $("rose");
+    rose.classList.toggle("calm", cls.calm);
+    for (var i = 0; i < 8; i++) $("w" + i).classList.remove("on");
+    if (!cls.calm && cls.sector >= 0) $("w" + cls.sector).classList.add("on");
+    $("arrow").style.transform = "rotate(" + d.deg + "deg)";
+
+    document.title = cls.name + " in " + state.place.name;
+
+    var st = $("status");
+    st.dataset.error = "false";
+    st.textContent = "Updated " + d.time + " local time. Data: Open-Meteo.";
+  }
+
+  function showError() {
+    var st = $("status");
+    st.dataset.error = "true";
+    st.textContent = "Couldn’t load wind data. Check your connection. Retrying in a minute.";
+    if (!state.data) {
+      $("windName").textContent = "–";
+      $("windGloss").textContent = "No reading yet.";
+      $("windDetail").textContent = "";
+    }
+  }
+
+  function fetchWind() {
+    clearTimeout(state.timer);
+    var p = state.place;
+    if (!p) return;
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + p.lat + "&longitude=" + p.lon +
+      "&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn&timezone=Europe%2FZagreb";
+    fetch(url)
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) {
+        var c = j.current;
+        if (!c) throw new Error("No current data");
+        state.data = {
+          kn: c.wind_speed_10m,
+          gust: c.wind_gusts_10m,
+          deg: c.wind_direction_10m,
+          time: String(c.time).split("T")[1] || "",
+          month: parseInt(String(c.time).slice(5, 7), 10),
+          hour: parseInt(String(c.time).slice(11, 13), 10)
+        };
+        render();
+        state.timer = setTimeout(fetchWind, 10 * 60 * 1000);
+      })
+      .catch(function () {
+        showError();
+        state.timer = setTimeout(fetchWind, 60 * 1000);
+      });
+  }
+
+  function setPlace(place) {
+    state.place = place;
+    state.data = null;
+    $("placeName").textContent = place.name;
+    $("prompt").textContent = "The wind right now is";
+    $("placeNote").textContent = place.note || "";
+    save("vjetar.place", JSON.stringify({ name: place.name, lat: place.lat, lon: place.lon, note: place.note || "" }));
+    $("windName").textContent = "…";
+    $("windName").style.fontSize = "";
+    $("windGloss").textContent = "Loading the latest reading.";
+    $("windDetail").textContent = "";
+    fetchWind();
+  }
+
+  function clearResults() {
+    var ul = $("results");
+    ul.hidden = true;
+    ul.innerHTML = "";
+  }
+
+  function pick(r) {
+    clearResults();
+    $("searchMsg").textContent = "";
+    $("q").value = "";
+    setPlace({ name: r.name, lat: r.latitude, lon: r.longitude, note: "" });
+  }
+
+  function search(query) {
+    clearResults();
+    var msg = $("searchMsg");
+    msg.textContent = "Searching…";
+    var url = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(query) +
+      "&count=6&language=hr&format=json&countryCode=HR";
+    fetch(url)
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) {
+        var list = j.results || [];
+        if (!list.length) {
+          msg.textContent = "No Croatian place found for “" + query + "”. Try another spelling.";
+          return;
+        }
+        if (list.length === 1) { pick(list[0]); return; }
+        msg.textContent = "Which one?";
+        var ul = $("results");
+        list.forEach(function (r) {
+          var li = document.createElement("li");
+          var btn = document.createElement("button");
+          btn.type = "button";
+          var b = document.createElement("b");
+          b.textContent = r.name;
+          var sp = document.createElement("span");
+          sp.textContent = r.admin1 ? "  " + r.admin1 : "";
+          btn.appendChild(b);
+          btn.appendChild(sp);
+          btn.addEventListener("click", function () { pick(r); });
+          li.appendChild(btn);
+          ul.appendChild(li);
+        });
+        ul.hidden = false;
+      })
+      .catch(function () {
+        msg.textContent = "Couldn’t search right now. Check your connection and try again.";
+      });
+  }
+
+  function setUnit(u) {
+    state.unit = u;
+    save("vjetar.unit", u);
+    document.querySelectorAll(".units button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.unit === u));
+    });
+    render();
+  }
+
+  function init() {
+    buildRose();
+
+    $("searchForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var q = $("q").value.trim();
+      if (q) search(q);
+    });
+
+    document.querySelectorAll(".units button").forEach(function (b) {
+      b.addEventListener("click", function () { setUnit(b.dataset.unit); });
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) fetchWind();
+    });
+
+    state.unit = load("vjetar.unit", "kn") === "kmh" ? "kmh" : "kn";
+    document.querySelectorAll(".units button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.unit === state.unit));
+    });
+
+    var place = null;
+    try {
+      var saved = JSON.parse(load("vjetar.place", "null"));
+      if (saved && typeof saved.lat === "number" && typeof saved.lon === "number" && saved.name) place = saved;
+    } catch (e) {}
+    if (place) {
+      setPlace(place);
+    } else {
+      $("q").focus();
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
