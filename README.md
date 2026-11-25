@@ -2,14 +2,14 @@
 
 A single-page website that tells you the traditional Croatian name of the wind blowing in a coastal town right now: bura, jugo, maestral, and so on.
 
-Type a Croatian town or city and the page shows the wind's name, a short description, speed, gusts, direction and Beaufort number, plus a wind rose with the current direction highlighted. It's one static HTML file with no build step and no API key.
+Type a coastal Croatian town or city and the page shows the wind's name, a short description, speed, gusts, direction and Beaufort number, plus a wind rose with the current direction highlighted. It's one static HTML file with no build step and no API key.
 
 ## How it works
 
 1. You enter a town. The page looks it up with the [Open-Meteo geocoding API](https://open-meteo.com/en/docs/geocoding-api), limited to Croatia. If several places share the name, you pick one from a short list.
 2. It fetches the current wind speed, gusts and direction (at 10 m) from the [Open-Meteo forecast API](https://open-meteo.com/en/docs).
 3. It converts the direction to a name, using the season and time of day where the wind depends on them.
-4. It refreshes every 10 minutes and whenever you return to the tab. Your last town and your speed unit are remembered in your browser.
+4. It refreshes every 10 minutes and whenever you return to the tab. Your last town, speed unit and language are remembered in your browser.
 
 ### How the wind is named
 
@@ -48,7 +48,7 @@ Open `index.html` in a browser. It needs an internet connection for the two Open
 
 - **Starting town**: the page asks for a town on the first visit. To preset one, set a default place object in the script and pass it to `setPlace` in `init`.
 - **Naming rules and descriptions**: edit the `WINDS` table and the `classify` function.
-- **Language**: wind names and compass letters are Croatian. The descriptions and interface text are in English.
+- **Language**: an EN | HR switch in the header changes the interface, descriptions and compass letters. English is the default, and the choice is remembered. The wind names themselves (bura, jugo, maestral and so on) stay Croatian in both languages. All text lives in the `I18N` object and the `WINDS` table in the script.
 
 ## Limitations
 

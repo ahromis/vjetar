@@ -69,6 +69,7 @@
   .units button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; }
   .finder { margin-top: 22px; }
   .finder form { display: flex; gap: 8px; max-width: 460px; }
   .finder input {
@@ -165,16 +166,22 @@
     <div class="place">
       <span id="placeName">No town chosen</span>
     </div>
-    <div class="units" role="group" aria-label="Speed units">
-      <button type="button" data-unit="kn" aria-pressed="true">knots</button>
-      <button type="button" data-unit="kmh" aria-pressed="false">km/h</button>
+    <div class="controls">
+      <div class="units" id="langGroup" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="hr" aria-pressed="false">HR</button>
+      </div>
+      <div class="units" id="unitGroup" role="group" aria-label="Speed units">
+        <button type="button" id="knBtn" data-unit="kn" aria-pressed="true">knots</button>
+        <button type="button" data-unit="kmh" aria-pressed="false">km/h</button>
+      </div>
     </div>
   </header>
 
   <div class="finder">
     <form id="searchForm" role="search">
       <input id="q" type="search" placeholder="Enter a coastal Croatian town or city" aria-label="Coastal Croatian town or city" autocomplete="off" spellcheck="false">
-      <button type="submit">Find wind</button>
+      <button type="submit" id="findBtn">Find wind</button>
     </form>
     <ul class="results" id="results" hidden></ul>
     <p class="msg" id="searchMsg" role="status"></p>
@@ -187,9 +194,9 @@
       <p class="gloss" id="windGloss">Type a coastal Croatian town or city above to see which wind is blowing there.</p>
       <p class="detail" id="windDetail"></p>
       <dl class="readout">
-        <div><dt>Speed</dt><dd id="rSpeed">–</dd></div>
-        <div><dt>Gusts</dt><dd id="rGust">–</dd></div>
-        <div><dt>Blowing from</dt><dd id="rDir">–</dd></div>
+        <div><dt id="dtSpeed">Speed</dt><dd id="rSpeed">–</dd></div>
+        <div><dt id="dtGust">Gusts</dt><dd id="rGust">–</dd></div>
+        <div><dt id="dtDir">Blowing from</dt><dd id="rDir">–</dd></div>
       </dl>
     </div>
     <div class="rose-wrap">
@@ -207,24 +214,111 @@
 (function () {
   "use strict";
 
+  // Interface text. Wind names are Croatian in both languages.
+  var I18N = {
+    en: {
+      title: "Which wind is it?",
+      knots: "knots", unitKn: "kn", unitKmh: "km/h",
+      find: "Find wind",
+      placeholder: "Enter a coastal Croatian town or city",
+      inputLabel: "Coastal Croatian town or city",
+      unitsLabel: "Speed units", langLabel: "Language",
+      roseLabel: "Wind rose with the current wind highlighted",
+      dtSpeed: "Speed", dtGust: "Gusts", dtDir: "Blowing from",
+      noTown: "No town chosen",
+      promptEmpty: "Which wind is blowing?",
+      promptNow: "The wind right now is",
+      glossEmpty: "Type a coastal Croatian town or city above to see which wind is blowing there.",
+      loading: "Loading the latest reading.",
+      noReading: "No reading yet.",
+      updated: function (t) { return "Updated " + t + " local time. Data: Open-Meteo."; },
+      error: "Couldn’t load wind data. Check your connection. Retrying in a minute.",
+      searching: "Searching…",
+      noResults: function (q) { return "No Croatian place found for “" + q + "”. Try another spelling."; },
+      which: "Which one?",
+      searchFail: "Couldn’t search right now. Check your connection and try again.",
+      titleIn: function (w, p) { return w + " in " + p; },
+      bftAbbr: "Bft",
+      bft: ["calm", "light air", "light breeze", "gentle breeze", "moderate breeze", "fresh breeze", "strong breeze", "near gale", "gale", "strong gale", "storm", "violent storm", "hurricane force"]
+    },
+    hr: {
+      title: "Koji je to vjetar?",
+      knots: "čvorovi", unitKn: "čv", unitKmh: "km/h",
+      find: "Traži vjetar",
+      placeholder: "Unesite primorski hrvatski grad ili mjesto",
+      inputLabel: "Primorski hrvatski grad ili mjesto",
+      unitsLabel: "Jedinice brzine", langLabel: "Jezik",
+      roseLabel: "Ruža vjetrova s istaknutim trenutačnim vjetrom",
+      dtSpeed: "Brzina", dtGust: "Udari", dtDir: "Puše iz",
+      noTown: "Nije odabran grad",
+      promptEmpty: "Koji vjetar puše?",
+      promptNow: "Trenutačno puše",
+      glossEmpty: "Upišite primorski hrvatski grad ili mjesto da vidite koji vjetar tamo puše.",
+      loading: "Učitavam najnovije očitanje.",
+      noReading: "Još nema očitanja.",
+      updated: function (t) { return "Ažurirano u " + t + " po lokalnom vremenu. Izvor podataka: Open-Meteo."; },
+      error: "Nije moguće učitati podatke o vjetru. Provjerite vezu. Pokušavam ponovno za minutu.",
+      searching: "Pretražujem…",
+      noResults: function (q) { return "Nije pronađeno mjesto u Hrvatskoj za „" + q + "“. Pokušajte s drugim pisanjem."; },
+      which: "Koje mjesto mislite?",
+      searchFail: "Pretraga trenutačno nije moguća. Provjerite vezu i pokušajte ponovno.",
+      titleIn: function (w, p) { return w + " – " + p; },
+      bftAbbr: "Bf",
+      bft: ["bonaca", "lahor", "povjetarac", "slab vjetar", "umjeren vjetar", "umjereno jak vjetar", "jak vjetar", "vrlo jak vjetar", "olujni vjetar", "jak olujni vjetar", "oluja", "jaka oluja", "orkan"]
+    }
+  };
+
   // Wind names by the direction the wind blows FROM, in 45° steps starting at north.
   var WINDS = [
-    { name: "Tramontana", dir: "S",  gloss: "Cold, dry wind from the north.", detail: "Usually brings clear skies and good visibility." },
-    { name: "Bura",       dir: "SI", gloss: "Cold, dry, gusty wind from the northeast.", detail: "Blows hardest in winter and comes in sudden gusts. It is the Adriatic’s best-known wind." },
-    { name: "Levant",     dir: "I",  gloss: "Wind from the east.", detail: "Often moist and tied to unsettled weather, with a rising sea." },
-    { name: "Jugo",       dir: "JI", gloss: "Warm, humid wind from the southeast.", detail: "Usually brings cloud, rain and a rough sea, and can last for days." },
-    { name: "Oštro",      dir: "J",  gloss: "Wind from the south.", detail: "Warm and often damp, closely related to the jugo." },
-    { name: "Lebić",      dir: "JZ", gloss: "Wind from the southwest.", detail: "Often gusty and linked to changing weather." },
-    { name: "Pulenat",    dir: "Z",  gloss: "Wind from the west.", detail: "Usually mild, and often comes with a change in the weather." },
-    { name: "Maestral",   dir: "SZ", gloss: "Fair-weather wind from the northwest.", detail: "A sea breeze that builds in the late morning and fades in the evening. It is the typical wind of fair summer days." }
+    { name: "Tramontana", dir: { en: "N",  hr: "S"  },
+      gloss: { en: "Cold, dry wind from the north.", hr: "Hladan, suh vjetar sa sjevera." },
+      detail: { en: "Usually brings clear skies and good visibility.", hr: "Obično donosi vedro nebo i dobru vidljivost." } },
+    { name: "Bura", dir: { en: "NE", hr: "SI" },
+      gloss: { en: "Cold, dry, gusty wind from the northeast.", hr: "Hladan, suh i mahovit vjetar sa sjeveroistoka." },
+      detail: { en: "Blows hardest in winter and comes in sudden gusts. It is the Adriatic’s best-known wind.", hr: "Najjača je zimi i puše u naglim udarima. Najpoznatiji je vjetar na Jadranu." } },
+    { name: "Levant", dir: { en: "E",  hr: "I"  },
+      gloss: { en: "Wind from the east.", hr: "Vjetar s istoka." },
+      detail: { en: "Often moist and tied to unsettled weather, with a rising sea.", hr: "Često vlažan i povezan s nestabilnim vremenom, uz uzburkanije more." } },
+    { name: "Jugo", dir: { en: "SE", hr: "JI" },
+      gloss: { en: "Warm, humid wind from the southeast.", hr: "Topao, vlažan vjetar s jugoistoka." },
+      detail: { en: "Usually brings cloud, rain and a rough sea, and can last for days.", hr: "Obično donosi oblake, kišu i uzburkano more, a može trajati danima." } },
+    { name: "Oštro", dir: { en: "S",  hr: "J"  },
+      gloss: { en: "Wind from the south.", hr: "Vjetar s juga." },
+      detail: { en: "Warm and often damp, closely related to the jugo.", hr: "Topao i često vlažan, blisko srodan jugu." } },
+    { name: "Lebić", dir: { en: "SW", hr: "JZ" },
+      gloss: { en: "Wind from the southwest.", hr: "Vjetar s jugozapada." },
+      detail: { en: "Often gusty and linked to changing weather.", hr: "Često mahovit i povezan s promjenom vremena." } },
+    { name: "Pulenat", dir: { en: "W",  hr: "Z"  },
+      gloss: { en: "Wind from the west.", hr: "Vjetar sa zapada." },
+      detail: { en: "Usually mild, and often comes with a change in the weather.", hr: "Obično blag, a često dolazi uz promjenu vremena." } },
+    { name: "Maestral", dir: { en: "NW", hr: "SZ" },
+      gloss: { en: "Fair-weather wind from the northwest.", hr: "Vjetar lijepog vremena sa sjeverozapada." },
+      detail: { en: "A sea breeze that builds in the late morning and fades in the evening. It is the typical wind of fair summer days.", hr: "Morski povjetarac koji jača pred podne i jenjava navečer. Tipičan je vjetar vedrih ljetnih dana." } }
   ];
 
-  var BEAUFORT_KN = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
-  var BEAUFORT_TXT = ["calm", "light air", "light breeze", "gentle breeze", "moderate breeze", "fresh breeze", "strong breeze", "near gale", "gale", "strong gale", "storm", "violent storm", "hurricane force"];
+  var TEXT_CALM = {
+    gloss: { en: "Calm. Almost no wind.", hr: "Zatišje. Gotovo nema vjetra." },
+    detail: { en: "Bonaca is the Croatian word for a calm sea.", hr: "Bonaca je naziv za mirno more." }
+  };
+  var TEXT_NW_GENERIC = {
+    gloss: { en: "Wind from the northwest, but not a true maestral.", hr: "Vjetar sa sjeverozapada, ali ne pravi maestral." },
+    detail: { en: "The maestral is a daytime sea breeze of the warm season. Outside that, this is simply a northwest wind.", hr: "Maestral je dnevni morski povjetarac toplijeg dijela godine. Izvan toga ovo je jednostavno sjeverozapadni vjetar." }
+  };
+  var TEXT_BURIN = {
+    gloss: { en: "A gentle night breeze from the northeast.", hr: "Blag noćni povjetarac sa sjeveroistoka." },
+    detail: { en: "The burin is a light land breeze that blows off the coast at night in the warm season. It usually means clear skies.", hr: "Burin je lagani kopneni povjetarac koji u toplom dijelu godine noću puše s obale prema moru. Obično znači vedro nebo." }
+  };
+  var TEXT_BURA_LIGHT = {
+    gloss: { en: "Light wind from the northeast, a weak bura.", hr: "Slab vjetar sa sjeveroistoka, slaba bura." },
+    detail: { en: "Same direction as the bura, but light for now. It can strengthen quickly and in gusts.", hr: "Isti smjer kao bura, ali za sada slab. Može brzo ojačati i zapuhati u udarima." }
+  };
 
-  var state = { place: null, unit: "kn", data: null, timer: null };
+  var BEAUFORT_KN = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
+
+  var state = { place: null, unit: "kn", lang: "en", data: null, timer: null, error: false, msg: null };
 
   var $ = function (id) { return document.getElementById(id); };
+  function T() { return I18N[state.lang]; }
 
   function load(key, fallback) {
     try { var v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
@@ -241,16 +335,14 @@
 
   function conv(kn) { return state.unit === "kn" ? kn : kn * 1.852; }
   function fmt(kn) {
-    var v = conv(kn);
-    return Math.round(v) + ' <small>' + (state.unit === "kn" ? "kn" : "km/h") + '</small>';
+    return Math.round(conv(kn)) + ' <small>' + (state.unit === "kn" ? T().unitKn : T().unitKmh) + '</small>';
   }
 
-  // Which wind is it? Returns the table entry plus the displayed name.
-  // Maestral and burin are thermal winds, so they depend on season and time of day.
-  // month: 1-12, hour: 0-23, both local time.
+  // Which wind is it? Maestral and burin are thermal winds, so they depend on
+  // season and time of day. month: 1-12, hour: 0-23, both local time.
   function classify(deg, kn, month, hour) {
     if (kn < 3) {
-      return { name: "Bonaca", dir: "", gloss: "Calm. Almost no wind.", detail: "Bonaca is the Croatian word for a calm sea.", calm: true };
+      return { name: "Bonaca", dir: null, gloss: TEXT_CALM.gloss, detail: TEXT_CALM.detail, calm: true, sector: -1 };
     }
     var idx = Math.round(deg / 45) % 8;
     var w = WINDS[idx];
@@ -261,16 +353,16 @@
     if (w.name === "Maestral" && !(warm && day)) {
       out.name = "Sjeverozapadni vjetar";
       out.sector = -1;
-      out.gloss = "Wind from the northwest, but not a true maestral.";
-      out.detail = "The maestral is a daytime sea breeze of the warm season. Outside that, this is simply a northwest wind.";
+      out.gloss = TEXT_NW_GENERIC.gloss;
+      out.detail = TEXT_NW_GENERIC.detail;
     } else if (w.name === "Bura" && kn < 13) {
       if (warm && !day) {
         out.name = "Burin";
-        out.gloss = "A gentle night breeze from the northeast.";
-        out.detail = "The burin is a light land breeze that blows off the coast at night in the warm season. It usually means clear skies.";
+        out.gloss = TEXT_BURIN.gloss;
+        out.detail = TEXT_BURIN.detail;
       } else {
-        out.gloss = "Light wind from the northeast, a weak bura.";
-        out.detail = "Same direction as the bura, but light for now. It can strengthen quickly and in gusts.";
+        out.gloss = TEXT_BURA_LIGHT.gloss;
+        out.detail = TEXT_BURA_LIGHT.detail;
       }
     }
     return out;
@@ -286,10 +378,10 @@
       var x2 = cx + Math.cos(a) * r, y2 = cy + Math.sin(a) * r;
       var lx = cx + Math.cos(a) * 134, ly = cy + Math.sin(a) * 134;
       html += '<line class="spoke" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
-      html += '<g data-i="' + i + '" id="w' + i + '">' +
+      html += '<g id="w' + i + '">' +
         '<ellipse class="chip" cx="' + lx.toFixed(1) + '" cy="' + ly.toFixed(1) + '" rx="40" ry="20"/>' +
         '<text class="name" x="' + lx.toFixed(1) + '" y="' + (ly - 1).toFixed(1) + '" text-anchor="middle">' + w.name + '</text>' +
-        '<text class="dir" x="' + lx.toFixed(1) + '" y="' + (ly + 12).toFixed(1) + '" text-anchor="middle">' + w.dir + '</text>' +
+        '<text class="dir" id="d' + i + '" x="' + lx.toFixed(1) + '" y="' + (ly + 12).toFixed(1) + '" text-anchor="middle">' + w.dir[state.lang] + '</text>' +
         '</g>';
     });
     // Arrow starts at the edge the wind comes from and points toward the centre (downwind).
@@ -299,23 +391,50 @@
     svg.innerHTML = html;
   }
 
+  function setHeadline(name) {
+    var h1 = $("windName");
+    h1.textContent = name;
+    var len = name.length;
+    h1.style.fontSize = len >= 14 ? "clamp(2rem, 6vw, 3.6rem)" : len >= 10 ? "clamp(2.2rem, 7.2vw, 4.2rem)" : len >= 7 ? "clamp(3rem, 10.5vw, 6.2rem)" : "";
+  }
+
+  function renderStatus() {
+    var st = $("status");
+    if (state.error) {
+      st.dataset.error = "true";
+      st.textContent = T().error;
+    } else if (state.data) {
+      st.dataset.error = "false";
+      st.textContent = T().updated(state.data.time);
+    } else {
+      st.dataset.error = "false";
+      st.textContent = "";
+    }
+  }
+
+  function renderMsg() {
+    var m = state.msg, el = $("searchMsg");
+    if (!m) { el.textContent = ""; return; }
+    var v = T()[m.key];
+    el.textContent = typeof v === "function" ? v(m.arg) : v;
+  }
+  function setMsg(key, arg) {
+    state.msg = key ? { key: key, arg: arg } : null;
+    renderMsg();
+  }
+
   function render() {
-    var d = state.data;
+    var d = state.data, L = state.lang, t = T();
     if (!d) return;
     var cls = classify(d.deg, d.kn, d.month, d.hour);
 
-    var h1 = $("windName");
-    h1.textContent = cls.name;
-    var len = cls.name.length;
-    h1.style.fontSize = len >= 14 ? "clamp(2rem, 6vw, 3.6rem)" : len >= 10 ? "clamp(2.2rem, 7.2vw, 4.2rem)" : len >= 7 ? "clamp(3rem, 10.5vw, 6.2rem)" : "";
-    $("windGloss").textContent = cls.gloss;
-    $("windDetail").textContent = cls.detail;
-    $("rSpeed").innerHTML = fmt(d.kn) + (d.kn >= 1 ? '' : '');
-    $("rGust").innerHTML = fmt(d.gust);
-    $("rDir").innerHTML = cls.calm ? "–" : Math.round(d.deg) + '° <small>' + cls.dir + '</small>';
-
+    setHeadline(cls.name);
+    $("windGloss").textContent = cls.gloss[L];
+    $("windDetail").textContent = cls.detail[L];
     var b = beaufort(d.kn);
-    $("rSpeed").innerHTML += ' <small>· Bft ' + b + ', ' + BEAUFORT_TXT[b] + '</small>';
+    $("rSpeed").innerHTML = fmt(d.kn) + ' <small>· ' + t.bftAbbr + ' ' + b + ', ' + t.bft[b] + '</small>';
+    $("rGust").innerHTML = fmt(d.gust);
+    $("rDir").innerHTML = cls.calm ? "–" : Math.round(d.deg) + '° <small>' + cls.dir[L] + '</small>';
 
     var rose = $("rose");
     rose.classList.toggle("calm", cls.calm);
@@ -323,20 +442,16 @@
     if (!cls.calm && cls.sector >= 0) $("w" + cls.sector).classList.add("on");
     $("arrow").style.transform = "rotate(" + d.deg + "deg)";
 
-    document.title = cls.name + " in " + state.place.name;
-
-    var st = $("status");
-    st.dataset.error = "false";
-    st.textContent = "Updated " + d.time + " local time. Data: Open-Meteo.";
+    document.title = t.titleIn(cls.name, state.place.name);
+    renderStatus();
   }
 
   function showError() {
-    var st = $("status");
-    st.dataset.error = "true";
-    st.textContent = "Couldn’t load wind data. Check your connection. Retrying in a minute.";
+    state.error = true;
+    renderStatus();
     if (!state.data) {
-      $("windName").textContent = "–";
-      $("windGloss").textContent = "No reading yet.";
+      setHeadline("–");
+      $("windGloss").textContent = T().noReading;
       $("windDetail").textContent = "";
     }
   }
@@ -360,6 +475,7 @@
           month: parseInt(String(c.time).slice(5, 7), 10),
           hour: parseInt(String(c.time).slice(11, 13), 10)
         };
+        state.error = false;
         render();
         state.timer = setTimeout(fetchWind, 10 * 60 * 1000);
       })
@@ -369,17 +485,64 @@
       });
   }
 
+  // Applies the chosen language to every piece of interface text.
+  function applyLang() {
+    var t = T();
+    document.documentElement.lang = state.lang;
+    $("langGroup").setAttribute("aria-label", t.langLabel);
+    $("unitGroup").setAttribute("aria-label", t.unitsLabel);
+    $("knBtn").textContent = t.knots;
+    $("findBtn").textContent = t.find;
+    $("q").placeholder = t.placeholder;
+    $("q").setAttribute("aria-label", t.inputLabel);
+    $("dtSpeed").textContent = t.dtSpeed;
+    $("dtGust").textContent = t.dtGust;
+    $("dtDir").textContent = t.dtDir;
+    $("rose").setAttribute("aria-label", t.roseLabel);
+    document.querySelectorAll("#langGroup button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.lang === state.lang));
+    });
+    for (var i = 0; i < 8; i++) $("d" + i).textContent = WINDS[i].dir[state.lang];
+
+    if (state.place) {
+      $("placeName").textContent = state.place.name;
+      $("prompt").textContent = t.promptNow;
+      if (state.data) {
+        render();
+      } else if (state.error) {
+        $("windGloss").textContent = t.noReading;
+      } else {
+        $("windGloss").textContent = t.loading;
+      }
+    } else {
+      $("placeName").textContent = t.noTown;
+      $("prompt").textContent = t.promptEmpty;
+      setHeadline("?");
+      $("windGloss").textContent = t.glossEmpty;
+      $("windDetail").textContent = "";
+      document.title = t.title;
+    }
+    renderMsg();
+    renderStatus();
+  }
+
+  function setLang(l) {
+    state.lang = l === "hr" ? "hr" : "en";
+    save("vjetar.lang", state.lang);
+    applyLang();
+  }
+
   function setPlace(place) {
     state.place = place;
     state.data = null;
+    state.error = false;
+    save("vjetar.place", JSON.stringify({ name: place.name, lat: place.lat, lon: place.lon }));
     $("placeName").textContent = place.name;
-    $("prompt").textContent = "The wind right now is";
-    $("placeNote").textContent = place.note || "";
-    save("vjetar.place", JSON.stringify({ name: place.name, lat: place.lat, lon: place.lon, note: place.note || "" }));
-    $("windName").textContent = "…";
-    $("windName").style.fontSize = "";
-    $("windGloss").textContent = "Loading the latest reading.";
+    $("prompt").textContent = T().promptNow;
+    setHeadline("…");
+    $("windGloss").textContent = T().loading;
     $("windDetail").textContent = "";
+    renderStatus();
     fetchWind();
   }
 
@@ -391,27 +554,23 @@
 
   function pick(r) {
     clearResults();
-    $("searchMsg").textContent = "";
+    setMsg(null);
     $("q").value = "";
-    setPlace({ name: r.name, lat: r.latitude, lon: r.longitude, note: "" });
+    setPlace({ name: r.name, lat: r.latitude, lon: r.longitude });
   }
 
   function search(query) {
     clearResults();
-    var msg = $("searchMsg");
-    msg.textContent = "Searching…";
+    setMsg("searching");
     var url = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(query) +
       "&count=6&language=hr&format=json&countryCode=HR";
     fetch(url)
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (j) {
         var list = j.results || [];
-        if (!list.length) {
-          msg.textContent = "No Croatian place found for “" + query + "”. Try another spelling.";
-          return;
-        }
+        if (!list.length) { setMsg("noResults", query); return; }
         if (list.length === 1) { pick(list[0]); return; }
-        msg.textContent = "Which one?";
+        setMsg("which");
         var ul = $("results");
         list.forEach(function (r) {
           var li = document.createElement("li");
@@ -429,21 +588,21 @@
         });
         ul.hidden = false;
       })
-      .catch(function () {
-        msg.textContent = "Couldn’t search right now. Check your connection and try again.";
-      });
+      .catch(function () { setMsg("searchFail"); });
   }
 
   function setUnit(u) {
     state.unit = u;
     save("vjetar.unit", u);
-    document.querySelectorAll(".units button").forEach(function (b) {
+    document.querySelectorAll("#unitGroup button").forEach(function (b) {
       b.setAttribute("aria-pressed", String(b.dataset.unit === u));
     });
     render();
   }
 
   function init() {
+    state.lang = load("vjetar.lang", "en") === "hr" ? "hr" : "en";   // English by default
+    state.unit = load("vjetar.unit", "kn") === "kmh" ? "kmh" : "kn";
     buildRose();
 
     $("searchForm").addEventListener("submit", function (e) {
@@ -451,18 +610,15 @@
       var q = $("q").value.trim();
       if (q) search(q);
     });
-
-    document.querySelectorAll(".units button").forEach(function (b) {
+    document.querySelectorAll("#unitGroup button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.unit === state.unit));
       b.addEventListener("click", function () { setUnit(b.dataset.unit); });
     });
-
+    document.querySelectorAll("#langGroup button").forEach(function (b) {
+      b.addEventListener("click", function () { setLang(b.dataset.lang); });
+    });
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) fetchWind();
-    });
-
-    state.unit = load("vjetar.unit", "kn") === "kmh" ? "kmh" : "kn";
-    document.querySelectorAll(".units button").forEach(function (b) {
-      b.setAttribute("aria-pressed", String(b.dataset.unit === state.unit));
     });
 
     var place = null;
@@ -470,9 +626,13 @@
       var saved = JSON.parse(load("vjetar.place", "null"));
       if (saved && typeof saved.lat === "number" && typeof saved.lon === "number" && saved.name) place = saved;
     } catch (e) {}
+
     if (place) {
+      state.place = place;
+      applyLang();
       setPlace(place);
     } else {
+      applyLang();
       $("q").focus();
     }
   }
